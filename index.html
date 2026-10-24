@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Itteriva</title><!-- v105f Drive folders, firm tester step 4 -->
+<title>Itteriva</title><!-- v105g Drive window, firm tester step 4 -->
 <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="icon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="icon-180.png"><meta name="theme-color" content="#202326">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600&family=Architects+Daughter&display=swap">
@@ -14111,6 +14111,105 @@ let WLCSKIP=false;
 {const _ow=openWelcome;openWelcome=function(){if(WLCSKIP){WLCSKIP=false;return;}return _ow.apply(this,arguments);};}
 // Title block details live in the drawing (sheet) settings only
 {const b=$('#pjInfo');if(b)b.remove();}
+
+
+/* ---------- Firm tester fixes, step 4d (2026-10-24, Ireny: the folder options were scattered; saving should simply browse her Google Drive,
+   where she can make or rename a folder) ----------
+   One Google Drive window for saving and opening: breadcrumb path, folders to step into, New folder, rename a folder, file name, Save here.
+   It needs to list all of the person's folders, so it asks for full Drive access (GSCOPE); Ctrl+S on a Drive project saves over the same file. */
+const GSCOPE='https://www.googleapis.com/auth/drive';GCFG.scope=GSCOPE;
+{const r=$('#pjGRow');if(r)r.remove();}
+document.body.insertAdjacentHTML('beforeend',`<dialog id="gdDlg" class="gd" aria-labelledby="gdT"><div class="gdh"><h3 id="gdT">Save to Google Drive</h3><button type="button" class="ghost" id="gdX">Cancel</button></div>
+  <nav class="gdpath" id="gdPath" aria-label="Folder"></nav>
+  <div class="gdbar"><button type="button" class="ghost" id="gdNewB">New folder</button><span class="gdcnt" id="gdCnt"></span></div>
+  <ul class="gdlist" id="gdList" role="listbox"></ul>
+  <p class="note" id="gdNote" role="status"></p>
+  <div class="gdfoot" id="gdFoot"><label class="gdname">File name<input type="text" id="gdName" autocomplete="off" spellcheck="false"></label><button type="button" class="primary" id="gdGo">Save here</button></div></dialog>`);
+{const st=document.createElement('style');st.textContent=`#gdDlg{width:min(640px,calc(100vw - 32px));max-height:min(640px,calc(100vh - 32px));padding:18px 20px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink)}
+#gdDlg[open]{display:flex;flex-direction:column;gap:8px}#gdDlg::backdrop{background:rgba(0,0,0,.35)}.gdh{display:flex;justify-content:space-between;align-items:center}.gdh h3{margin:0;font-size:17px}
+.gdpath{display:flex;flex-wrap:wrap;align-items:center;gap:2px;font-size:13px}.gdpath button{border:0;background:none;color:var(--accent);padding:3px 4px;cursor:pointer;font:inherit}.gdpath button[aria-current]{color:var(--ink);font-weight:600;cursor:default}.gdpath i{opacity:.5;font-style:normal}
+.gdbar{display:flex;align-items:center;gap:10px}.gdcnt{font-size:12px;opacity:.65}
+.gdlist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:auto;min-height:180px;flex:1}
+.gdlist li{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13.5px}.gdlist li:last-child{border-bottom:0}
+.gdlist li.gdf{cursor:pointer}.gdlist li.gdf:hover,.gdlist li.gdp:hover{background:color-mix(in srgb,var(--accent) 9%,transparent)}.gdlist li.gdp{cursor:pointer}.gdlist li.gdx{opacity:.55}
+.gdlist .gdi{width:18px;text-align:center;opacity:.7}.gdlist .gdn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gdlist .gdd{font-size:12px;opacity:.6}
+.gdlist .gdren{border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;font-size:12px;padding:2px 4px}.gdlist input{flex:1;font:inherit}
+.gdlist .gdempty{opacity:.65;justify-content:center;padding:24px}.gdfoot{display:flex;align-items:end;gap:10px}.gdname{flex:1;display:flex;flex-direction:column;gap:4px;font-size:12px}.gdname input{font-size:14px;padding:6px 8px}
+#gdNote.pjbad{color:var(--danger,#b3261e);font-weight:600}`;document.head.appendChild(st);}
+const GD={mode:'save',path:[],items:[],t:null,ren:null,mk:false,confirm:null};
+const gdDlg=$('#gdDlg');
+function gdNote(t,bad){const n=$('#gdNote');n.innerHTML=t||'';n.classList.toggle('pjbad',!!bad);}
+function gdCur(){return GD.path[GD.path.length-1]||{id:'root',name:'My Drive'};}
+async function gdPathTo(dir){if(!dir||dir.id==='root')return[{id:'root',name:'My Drive'}];const out=[{id:dir.id,name:dir.name}];
+  try{let id=dir.id;for(let i=0;i<10;i++){const f=await gApiCall(GD.t,`files/${id}?fields=parents`);const p=f.parents&&f.parents[0];if(!p)break;
+    const pf=await gApiCall(GD.t,`files/${p}?fields=id,name,parents`);if(!pf.parents||!pf.parents.length){break;}out.unshift({id:pf.id,name:pf.name});id=pf.id;}}catch(e){}
+  out.unshift({id:'root',name:'My Drive'});return out;}
+async function gdLoad(){const c=gdCur();GD.ren=null;GD.mk=false;GD.confirm=null;gdGoLabel();$('#gdList').innerHTML='<li class="gdempty">Loading…</li>';gdRenderPath();
+  try{const q=encodeURIComponent(`'${c.id}' in parents and trashed=false and (mimeType='${GFOLD}' or mimeType='application/json' or name contains '.s2b.json')`);
+    const l=await gApiCall(GD.t,`files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=folder,name_natural&pageSize=300`);
+    if(gdCur()!==c)return;GD.items=l.files||[];gdRender();}
+  catch(e){$('#gdList').innerHTML='';gdNote(hx(e.message),true);}}
+function gdRenderPath(){$('#gdPath').innerHTML=GD.path.map((p,i)=>`${i?'<i>›</i>':''}<button type="button" data-i="${i}"${i===GD.path.length-1?' aria-current="page"':''}>${hx(p.name)}</button>`).join('');
+  $('#gdPath').querySelectorAll('button').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(i===GD.path.length-1)return;GD.path=GD.path.slice(0,i+1);gdLoad();});}
+function gdWhen(t){try{return new Date(t).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});}catch(e){return'';}}
+function gdRender(){const L=$('#gdList'),dirs=GD.items.filter(f=>f.mimeType===GFOLD),files=GD.items.filter(f=>f.mimeType!==GFOLD);
+  let h=GD.mk?`<li><span class="gdi">📁</span><input type="text" id="gdMkIn" placeholder="New folder name" autocomplete="off"><button type="button" class="ghost" id="gdMkOk">Make</button></li>`:'';
+  h+=dirs.map(f=>GD.ren===f.id?`<li><span class="gdi">📁</span><input type="text" id="gdRnIn" value="${hx(f.name)}" autocomplete="off"><button type="button" class="ghost" id="gdRnOk">Rename</button></li>`
+    :`<li class="gdf" data-id="${f.id}" role="option"><span class="gdi">📁</span><span class="gdn">${hx(f.name)}</span><button type="button" class="gdren" data-id="${f.id}">Rename</button></li>`).join('');
+  h+=files.map(f=>`<li class="${GD.mode==='open'?'gdp':'gdx'}" data-id="${f.id}" role="option"><span class="gdi">▤</span><span class="gdn">${hx(f.name)}</span><span class="gdd">${gdWhen(f.modifiedTime)}</span></li>`).join('');
+  if(!h)h=`<li class="gdempty">${GD.mode==='open'?'No Itteriva projects in this folder.':'This folder is empty. Save here, or make a New folder.'}</li>`;
+  L.innerHTML=h;$('#gdCnt').textContent=dirs.length?`${dirs.length} folder${dirs.length>1?'s':''}`:'';
+  L.querySelectorAll('li.gdf').forEach(li=>li.onclick=e=>{if(e.target.closest('.gdren'))return;const f=GD.items.find(x=>x.id===li.dataset.id);GD.path.push({id:f.id,name:f.name});gdLoad();});
+  L.querySelectorAll('.gdren').forEach(b=>b.onclick=()=>{GD.ren=b.dataset.id;GD.mk=false;gdRender();const i=$('#gdRnIn');i.focus();i.select();});
+  L.querySelectorAll('li.gdp').forEach(li=>li.onclick=()=>gdOpenFile(GD.items.find(x=>x.id===li.dataset.id)));
+  L.querySelectorAll('li.gdx').forEach(li=>li.onclick=()=>{const f=GD.items.find(x=>x.id===li.dataset.id);$('#gdName').value=f.name;gdGoLabel();});
+  const mk=$('#gdMkIn');if(mk){mk.focus();mk.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();gdMake();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();GD.mk=false;gdRender();}};$('#gdMkOk').onclick=gdMake;}
+  const rn=$('#gdRnIn');if(rn){rn.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();gdRename();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();GD.ren=null;gdRender();}};$('#gdRnOk').onclick=gdRename;}}
+async function gdMake(){const n=($('#gdMkIn').value||'').trim();if(!n){$('#gdMkIn').focus();return;}
+  try{const c=gdCur(),f=await gMkDir(GD.t,n,c.id==='root'?null:c.id);GD.path.push({id:f.id,name:f.name});gdNote(`Made the folder ${hx(f.name)}. You're in it now.`);gdLoad();}catch(e){gdNote(hx(e.message),true);}}
+async function gdRename(){const id=GD.ren,n=($('#gdRnIn').value||'').trim(),f=GD.items.find(x=>x.id===id);if(!f)return;if(!n||n===f.name){GD.ren=null;gdRender();return;}
+  try{await gApiCall(GD.t,`files/${id}?fields=id,name`,{method:'PATCH',body:JSON.stringify({name:n})});f.name=n;GD.ren=null;gdNote(`Renamed the folder to ${hx(n)}.`);gdRender();
+    if(PJ&&PJ.cloud&&PJ.cloud.dir&&PJ.cloud.dir.id===id){PJ.cloud.dir.name=n;pjWrite(true);}}catch(e){gdNote(hx(e.message),true);}}
+function gdGoLabel(){const b=$('#gdGo');if(GD.mode!=='save')return;const n=$('#gdName').value.trim(),hit=GD.items.find(f=>f.mimeType!==GFOLD&&f.name===gdFileName(n));
+  b.textContent=hit?'Replace':'Save here';GD.confirm=hit||null;gdNote(hit?`${hx(hit.name)} is already in this folder. Replace saves over it.`:'');}
+function gdFileName(n){n=(n||'').trim()||pjName();return /\.s2b\.json$/i.test(n)?n:pjFile(n.replace(/\.json$/i,''));}
+async function gdShow(mode){GD.mode=mode;if(pjDlg.open)pjDlg.close();
+  $('#gdT').textContent=mode==='open'?'Open from Google Drive':'Save to Google Drive';$('#gdFoot').hidden=mode==='open';
+  $('#gdName').value=gdFileName(pjName()==='Untitled project'?'':pjName());gdNote('');$('#gdList').innerHTML='<li class="gdempty">Signing in to Google…</li>';
+  try{gdDlg.showModal();}catch(e){gdDlg.setAttribute('open','');}
+  try{GD.t=await gToken();}catch(e){$('#gdList').innerHTML='';gdNote(hx(e.message),true);return;}
+  const d=PJ&&PJ.cloud&&PJ.cloud.dir||PRF.gDir;GD.path=d?await gdPathTo(d):[{id:'root',name:'My Drive'}];gdLoad();}
+async function gUploadTo(t,fid,name,parent){const data=projectJSON(),sv=JSON.parse(data).saved,B='itteriva'+Date.now().toString(36);
+  const meta=fid?{name}:{name,mimeType:'application/json',parents:parent&&parent!=='root'?[parent]:undefined};
+  const body=`--${B}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${B}\r\nContent-Type: application/json\r\n\r\n${data}\r\n--${B}--`;
+  const r=await fetch(`https://www.googleapis.com/upload/drive/v3/files${fid?'/'+fid:''}?uploadType=multipart&fields=id,name,webViewLink`,{method:fid?'PATCH':'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'multipart/related; boundary='+B},body});
+  if(r.status===401){GTOK=null;throw new Error('Google sign-in expired. Try again to sign in.');}
+  if(!r.ok){let why='';try{why=(await r.json()).error.message||'';}catch(_){}console.error('Google Drive save',r.status,why);const e=new Error(`Google Drive did not accept the file (${r.status}${why?': '+why:''}).`);e.status=r.status;throw e;}
+  return Object.assign(await r.json(),{sv});}
+function gDone(j,dir){PJ.cloud={p:'gdrive',id:j.id,dir,link:j.webViewLink||''};PRF.gDir=dir;prfSave();pjSaved(`${j.name} on Google Drive`,j.sv);
+  msg(`Saved ${hx(j.name)} to Google Drive in ${hx(dir.name)}.${PJ.cloud.link?` <a href="${hx(PJ.cloud.link)}" target="_blank" rel="noopener">Open in Google Drive</a>.`:''} Ctrl+S saves over the same file from now on.`);}
+async function gdSaveHere(){const name=gdFileName($('#gdName').value),c=gdCur(),b=$('#gdGo');
+  const nm=name.replace(/\.s2b\.json$/i,'');if(nm&&nm!==pjName()){S.sheetStyle.project=nm;projSync();save();}
+  b.disabled=true;b.textContent='Saving…';gdNote('Saving…');
+  try{const j=await gUploadTo(GD.t,GD.confirm&&GD.confirm.id,name,c.id);gdDlg.close();gDone(j,{id:c.id,name:c.name});}
+  catch(e){gdNote(hx(e.message)+' Your work is still kept in this browser.',true);}finally{b.disabled=false;gdGoLabel();}}
+async function gdOpenFile(f){if(!f)return;gdNote(`Opening ${hx(f.name)}…`);
+  try{const r=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}?alt=media`,{headers:{Authorization:'Bearer '+GD.t}});if(!r.ok)throw new Error(`Google Drive said no (${r.status}).`);
+    const file=new File([await r.text()],f.name,{type:'application/json'});const c=gdCur();gdDlg.close();await projOpenFile(file);
+    if(PJ&&PJ.file===f.name){PJ.cloud={p:'gdrive',id:f.id,dir:{id:c.id,name:c.name},link:''};PJ.file=`${f.name} on Google Drive`;PRF.gDir=PJ.cloud.dir;prfSave();pjWrite(true);projMark();
+      msg(`Opened ${hx(f.name)} from Google Drive (${hx(c.name)}). Ctrl+S saves your changes back to it.`);}}
+  catch(e){gdNote(hx(e.message||'That file could not be opened.'),true);}}
+$('#gdX').onclick=()=>gdDlg.close();$('#gdGo').onclick=gdSaveHere;$('#gdName').addEventListener('input',gdGoLabel);
+$('#gdName').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();gdSaveHere();}});
+$('#gdNewB').onclick=()=>{GD.mk=true;GD.ren=null;gdRender();};
+// Ctrl+S on a project already on Drive saves over it quietly; otherwise (and from the Project window button) the Drive window opens
+gSave=async function(pick){if(!PJ)await projBoot();const c=PJ.cloud&&PJ.cloud.p==='gdrive'?PJ.cloud:null;
+  if(pick||!c)return gdShow('save');msg('Saving to Google Drive…');
+  try{const t=await gToken();let j;try{j=await gUploadTo(t,c.id,pjFile(pjName()));}catch(e){if(e.status===404||e.status===403)return gdShow('save');throw e;}gDone(j,c.dir||{id:'root',name:'My Drive'});}
+  catch(e){msg(hx(e.message)+' Your work is still kept in this browser.');}};
+gOpen=function(){return gdShow('open');};
+{for(const [id,fn] of [['#pjGSave',()=>gSave(true)],['#pjGOpen',()=>gOpen()]]){const o=$(id);if(o){const n=o.cloneNode(true);n.disabled=false;n.textContent=id==='#pjGSave'?'Save to Google Drive…':'Open from Google Drive…';o.replaceWith(n);n.addEventListener('click',fn);}}}
+gDirRender=function(){};
 
 </script>
 
