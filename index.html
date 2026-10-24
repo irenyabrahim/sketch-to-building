@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Itteriva</title><!-- v105c textures, firm tester step 2 -->
+<title>Itteriva</title><!-- v105d Google Drive save, firm tester step 4 -->
 <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="icon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="icon-180.png"><meta name="theme-color" content="#202326">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600&family=Architects+Daughter&display=swap">
@@ -13975,6 +13975,49 @@ document.head.insertAdjacentHTML('beforeend',`<style>#wlcDlg .wq1{display:flex;g
 
 // welcome: the layout preview sits right beside question 1's text, centered on it (Ireny 2026-10-24: it was off in the corner)
 document.head.insertAdjacentHTML('beforeend',`<style>#wlcDlg .wq1{justify-content:flex-start;align-items:center;gap:32px}#wlcDlg .wq1l{flex:0 1 560px}#wlcDlg .wq1>.th{margin-top:0}</style>`);
+
+
+/* ---------- Firm tester fixes, step 4a (2026-10-24): save to and open from Google Drive ----------
+   Maria: save to one cloud file that is overwritten on each save, instead of downloading files. Sign-in is only asked for when someone uses it.
+   Access is drive.file: Itteriva sees only the files it saved or that the person picks with it. The client ID and browser key are public by design;
+   they only work from the tester site's address (set in Ireny's Google Cloud project). */
+const GCFG={client:'993178130274-erf09lpe7srggs90nhf4kmis5ic1jjs3.apps.googleusercontent.com',key:'AIzaSyBkhil4GEmUXeESffbF4mWFxfjFqSkLO8M',app:'993178130274',scope:'https://www.googleapis.com/auth/drive.file'};
+let GTOK=null,GTC=null;const GJS={};
+function gLoad(src){return GJS[src]||(GJS[src]=new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.async=true;s.onload=ok;s.onerror=()=>{delete GJS[src];no(new Error('Google sign-in could not load. Check the connection and try again.'));};document.head.appendChild(s);}));}
+const gGis=()=>gLoad('https://accounts.google.com/gsi/client'),gApi=()=>gLoad('https://apis.google.com/js/api.js').then(()=>new Promise(ok=>gapi.load('picker',ok)));
+// load early when the Project window opens, so the sign-in popup still counts as part of the click
+function gWarm(){gGis().catch(()=>{});gApi().catch(()=>{});}
+function gToken(){if(GTOK&&GTOK.exp>Date.now()+60000)return Promise.resolve(GTOK.t);
+  return gGis().then(()=>new Promise((ok,no)=>{GTC=google.accounts.oauth2.initTokenClient({client_id:GCFG.client,scope:GCFG.scope,
+    callback:r=>{if(r&&r.access_token){GTOK={t:r.access_token,exp:Date.now()+(+r.expires_in||3600)*1000};ok(GTOK.t);}else no(new Error(r&&r.error_description||'Google sign-in was cancelled.'));},
+    error_callback:e=>no(new Error(e&&e.type==='popup_closed'?'Google sign-in was closed before it finished.':e&&e.type==='popup_failed_to_open'?'The browser blocked the Google sign-in window. Allow pop-ups for this site and try again.':'Google sign-in did not finish.'))});
+    GTC.requestAccessToken({prompt:''});}));}
+async function gSave(){if(!PJ)await projBoot();if(pjName()==='Untitled project'){projOpen('save');pjMsg('Give the project a name first, then Save to Google Drive.');return;}
+  const name=pjFile(pjName()),data=projectJSON(),sv=JSON.parse(data).saved;msg('Saving to Google Drive…');
+  let t;try{t=await gToken();}catch(e){msg(hx(e.message)+' Your work is still kept in this browser.');return;}
+  const id=PJ.cloud&&PJ.cloud.p==='gdrive'?PJ.cloud.id:null,B='itteriva'+Date.now().toString(36);
+  const body=`--${B}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(id?{name}:{name,mimeType:'application/json'})}\r\n--${B}\r\nContent-Type: application/json\r\n\r\n${data}\r\n--${B}--`;
+  const send=fid=>fetch(`https://www.googleapis.com/upload/drive/v3/files${fid?'/'+fid:''}?uploadType=multipart&fields=id,name`,{method:fid?'PATCH':'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'multipart/related; boundary='+B},body});
+  try{let r=await send(id);if(id&&r.status===404)r=await send(null);if(r.status===401){GTOK=null;throw new Error('Google sign-in expired. Save again to sign in.');}
+    if(!r.ok)throw new Error(`Google Drive said no (${r.status}).`);const j=await r.json();PJ.cloud={p:'gdrive',id:j.id};pjSaved(`${j.name||name} on Google Drive`,sv);
+    msg(`Saved ${hx(j.name||name)} to your Google Drive. Ctrl+S saves over the same file from now on; open it on any computer with Open from Google Drive.`);}
+  catch(e){msg(hx(e.message||'Saving to Google Drive failed.')+' Your work is still kept in this browser.');}}
+async function gOpen(){if(pjDlg.open)pjDlg.close();msg('Opening Google Drive…');let t;
+  try{await gApi();t=await gToken();}catch(e){msg(hx(e.message));return;}
+  const v=new google.picker.DocsView(google.picker.ViewId.DOCS).setMimeTypes('application/json').setIncludeFolders(true).setMode(google.picker.DocsViewMode.LIST);
+  new google.picker.PickerBuilder().addView(v).setOAuthToken(t).setDeveloperKey(GCFG.key).setAppId(GCFG.app).setTitle('Open an Itteriva project')
+    .setCallback(async d=>{if(d.action!==google.picker.Action.PICKED)return;const f=d.docs&&d.docs[0];if(!f)return;msg(`Opening ${hx(f.name)} from Google Drive…`);
+      try{const r=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}?alt=media`,{headers:{Authorization:'Bearer '+t}});if(!r.ok)throw new Error(`Google Drive said no (${r.status}).`);
+        const file=new File([await r.text()],f.name,{type:'application/json'});await projOpenFile(file);
+        if(PJ&&PJ.file===f.name){PJ.cloud={p:'gdrive',id:f.id};PJ.file=`${f.name} on Google Drive`;pjWrite(true);projMark();msg(`Opened ${hx(f.name)} from Google Drive. Ctrl+S saves your changes back to it.`);}}
+      catch(e){msg(hx(e.message||'That file could not be opened.'));}}).build().setVisible(true);}
+// Save (Ctrl+S) on a project that lives on Google Drive goes back to the same Drive file
+{const _ps=projSave;projSave=function(as,incr,direct){if(!as&&PJ&&PJ.cloud&&PJ.cloud.p==='gdrive')return gSave();if(as&&PJ&&PJ.cloud)delete PJ.cloud;return _ps.apply(this,arguments);};}
+{const a=document.querySelector('#pjDlg .pjacts');if(a)a.insertAdjacentHTML('beforeend',`<button type="button" class="ghost" id="pjGSave">Save to Google Drive</button><button type="button" class="ghost" id="pjGOpen">Open from Google Drive…</button>`);
+  $('#pjGSave').addEventListener('click',()=>{pjDlg.close();gSave();});$('#pjGOpen').addEventListener('click',gOpen);}
+{const _po=projOpen;projOpen=function(){gWarm();return _po.apply(this,arguments);};}
+function gCmd(lk){if(['savetogoogledrive','savedrive','gdrivesave','googledrive','drivesave'].includes(lk)){gSave();return true;}if(['openfromgoogledrive','opendrive','gdriveopen','driveopen'].includes(lk)){gOpen();return true;}return false;}
+{const _r=run;run=function(raw){const lk=String(raw||'').trim().toLowerCase().replace(/\s+/g,'');if(lk&&gCmd(lk)){cmdIn.value='';return;}return _r.apply(this,arguments);};}
 
 </script>
 
