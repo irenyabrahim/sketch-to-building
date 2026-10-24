@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Itteriva</title><!-- v105e Google Drive save fix, firm tester step 4 -->
+<title>Itteriva</title><!-- v105f Drive folders, firm tester step 4 -->
 <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="icon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="icon-180.png"><meta name="theme-color" content="#202326">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600&family=Architects+Daughter&display=swap">
@@ -14042,6 +14042,75 @@ gSave=async function(){if(!PJ)await projBoot();const N=$('#pjName');
   catch(e){done();console.error('Google Drive save',e);gNote(hx(e.message||'Saving to Google Drive failed.')+' Your work is still kept in this browser.',true);return false;}};
 {const o=$('#pjGSave');if(o){const n=o.cloneNode(true);o.replaceWith(n);n.addEventListener('click',()=>gSave());}}
 {const st=document.createElement('style');st.textContent='#pjMsg.pjbad{color:var(--danger,#b3261e);font-weight:600}';document.head.appendChild(st);}
+
+
+/* ---------- Firm tester fixes, step 4c (2026-10-24, Ireny): Drive save didn't say where it went or let her pick a folder; New project from a model
+   file opened the welcome on top of the import window; Title block details belongs in the drawing settings only. ---------- */
+// Google Drive folder: chosen with the Google folder picker or made with New folder; the first save without a choice goes in "Itteriva projects" in My Drive
+const GFOLD='application/vnd.google-apps.folder',GDEF='Itteriva projects';
+function gDir(){return PJ&&PJ.cloud&&PJ.cloud.dir||PRF.gDir||null;}
+function gSetDir(d){PRF.gDir=d;prfSave();if(PJ&&PJ.cloud){PJ.cloud.dir=d;pjWrite(true);}gDirRender();}
+function gDirRender(){const n=$('#pjGDir'),a=$('#pjGLink');if(!n)return;const d=gDir(),c=PJ&&PJ.cloud&&PJ.cloud.p==='gdrive'?PJ.cloud:null;
+  n.textContent=d?d.name:c?'the folder you opened it from':`${GDEF} (made in My Drive the first time you save)`;
+  $('#pjGWhat').textContent=c?'This project is saved on Google Drive in':'Saves to Google Drive in';
+  if(a){a.hidden=!(c&&c.link);if(c&&c.link)a.href=c.link;}}
+async function gApiCall(t,url,o={}){const r=await fetch('https://www.googleapis.com/drive/v3/'+url,Object.assign({},o,{headers:Object.assign({Authorization:'Bearer '+t},o.body?{'Content-Type':'application/json'}:{})}));
+  if(r.status===401){GTOK=null;throw new Error('Google sign-in expired. Try again to sign in.');}
+  if(!r.ok){let why='';try{why=(await r.json()).error.message||'';}catch(_){}console.error('Google Drive',url,r.status,why);throw new Error(`Google Drive said no (${r.status}${why?': '+why:''}).`);}return r.json();}
+async function gMkDir(t,name,parent){return gApiCall(t,'files?fields=id,name',{method:'POST',body:JSON.stringify({name,mimeType:GFOLD,parents:parent?[parent]:undefined})});}
+async function gDefDir(t){const q=encodeURIComponent(`name='${GDEF}' and mimeType='${GFOLD}' and trashed=false`);
+  const l=await gApiCall(t,`files?q=${q}&fields=files(id,name)&pageSize=1`);const f=l.files&&l.files[0]||await gMkDir(t,GDEF);return{id:f.id,name:f.name};}
+// moves a file that is already on Drive into the newly chosen folder
+async function gMove(t,d){const c=PJ&&PJ.cloud;if(!c||!c.id)return;const f=await gApiCall(t,`files/${c.id}?fields=parents`);
+  await gApiCall(t,`files/${c.id}?addParents=${d.id}${f.parents&&f.parents.length?'&removeParents='+f.parents.join(','):''}&fields=id`,{method:'PATCH',body:'{}'});}
+gSave=async function(){if(!PJ)await projBoot();const N=$('#pjName');
+  if(N&&N.value.trim()&&pjName()==='Untitled project'){S.sheetStyle.project=N.value.trim();projSync();save();}
+  if(pjName()==='Untitled project'){if(!pjDlg.open)projOpen('save');setTimeout(()=>{gNote('Type a project name above first, then Save to Google Drive.',true);$('#pjName').focus();},60);return false;}
+  const B0=$('#pjGSave');if(B0){B0.disabled=true;B0.textContent='Saving…';}
+  const done=()=>{if(B0){B0.disabled=false;B0.textContent='Save to Google Drive';}};
+  const name=pjFile(pjName()),data=projectJSON(),sv=JSON.parse(data).saved;gNote('Saving to Google Drive… If a Google window opens, choose your account there.');
+  try{const t=await gToken();const id=PJ.cloud&&PJ.cloud.p==='gdrive'?PJ.cloud.id:null;let dir=gDir();
+    const B='itteriva'+Date.now().toString(36);
+    const send=async fid=>{if(!fid&&!dir)dir=await gDefDir(t);
+      const meta=fid?{name}:{name,mimeType:'application/json',parents:[dir.id]};
+      const body=`--${B}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${B}\r\nContent-Type: application/json\r\n\r\n${data}\r\n--${B}--`;
+      return fetch(`https://www.googleapis.com/upload/drive/v3/files${fid?'/'+fid:''}?uploadType=multipart&fields=id,name,webViewLink`,{method:fid?'PATCH':'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'multipart/related; boundary='+B},body});};
+    let r=await send(id);if(id&&(r.status===404||r.status===403))r=await send(null);
+    if(r.status===401){GTOK=null;throw new Error('Google sign-in expired. Click Save to Google Drive again to sign in.');}
+    if(!r.ok){let why='';try{why=(await r.json()).error.message||'';}catch(_){}console.error('Google Drive save',r.status,why);
+      throw new Error(r.status===404&&!id?`Itteriva can't save into ${dir?dir.name:'that folder'}. Choose another folder or make a New folder.`:`Google Drive did not accept the file (${r.status}${why?': '+why:''}).`);}
+    const j=await r.json();done();const keep=PJ.cloud&&PJ.cloud.dir;PJ.cloud={p:'gdrive',id:j.id,dir:dir||keep||null,link:j.webViewLink||''};if(dir){PRF.gDir=dir;prfSave();}
+    pjSaved(`${j.name||name} on Google Drive`,sv);const where=PJ.cloud.dir?` in the ${hx(PJ.cloud.dir.name)} folder`:'';
+    msg(`Saved ${hx(j.name||name)} to your Google Drive${where}.${PJ.cloud.link?` <a href="${hx(PJ.cloud.link)}" target="_blank" rel="noopener">Open in Google Drive</a>.`:''} Ctrl+S saves over the same file from now on.`);return true;}
+  catch(e){done();console.error('Google Drive save',e);gNote(hx(e.message||'Saving to Google Drive failed.')+' Your work is still kept in this browser.',true);return false;}};
+// Change folder: the Google folder picker sits behind an open window, so the Project window steps aside and comes back after
+async function gPickDir(){pjDlg.close();let t;try{await gApi();t=await gToken();}catch(e){await projOpen();gNote(hx(e.message),true);return;}
+  const v=new google.picker.DocsView(google.picker.ViewId.FOLDERS).setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(GFOLD).setParent('root');
+  new google.picker.PickerBuilder().addView(v).setOAuthToken(t).setDeveloperKey(GCFG.key).setAppId(GCFG.app).setTitle('Choose a folder for this project')
+    .setCallback(async d=>{if(d.action===google.picker.Action.CANCEL){projOpen();return;}if(d.action!==google.picker.Action.PICKED)return;
+      const f=d.docs&&d.docs[0];await projOpen();if(!f)return;const dir={id:f.id,name:f.name};
+      try{await gMove(t,dir);gSetDir(dir);gNote(PJ.cloud&&PJ.cloud.id?`Moved the project file to ${hx(dir.name)} on Google Drive.`:`Google Drive saves go to ${hx(dir.name)} now.`);}
+      catch(e){gNote(hx(e.message),true);}}).build().setVisible(true);}
+async function gNewDir(name){name=(name||'').trim();if(!name){$('#pjGNewIn').focus();return;}gNote(`Making the folder ${hx(name)}…`);
+  try{const t=await gToken(),cur=gDir(),f=await gMkDir(t,name,cur&&cur.id),dir={id:f.id,name:f.name};await gMove(t,dir);gSetDir(dir);$('#pjGNew').hidden=true;$('#pjGNewIn').value='';
+    gNote(`Made the folder ${hx(dir.name)}${cur?` inside ${hx(cur.name)}`:' in My Drive'}. ${PJ.cloud&&PJ.cloud.id?'The project file moved into it.':'Google Drive saves go there now.'}`);}
+  catch(e){gNote(hx(e.message),true);}}
+{const a=document.querySelector('#pjDlg .pjacts');if(a)a.insertAdjacentHTML('afterend',`<div class="pjg" id="pjGRow"><span id="pjGWhat">Saves to Google Drive in</span> <b id="pjGDir"></b>
+  <button type="button" class="ghost" id="pjGChange">Change folder…</button><button type="button" class="ghost" id="pjGNewB">New folder…</button>
+  <span id="pjGNew" hidden><input type="text" id="pjGNewIn" placeholder="Folder name" autocomplete="off"><button type="button" class="ghost" id="pjGNewOk">Make folder</button></span>
+  <a id="pjGLink" target="_blank" rel="noopener" hidden>Open in Google Drive</a></div>`);
+  $('#pjGChange').addEventListener('click',gPickDir);
+  $('#pjGNewB').addEventListener('click',()=>{const s=$('#pjGNew');s.hidden=!s.hidden;if(!s.hidden)$('#pjGNewIn').focus();});
+  $('#pjGNewOk').addEventListener('click',()=>gNewDir($('#pjGNewIn').value));
+  $('#pjGNewIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();gNewDir(e.target.value);}});
+  const st=document.createElement('style');st.textContent='#pjGRow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0 2px;font-size:13px;color:var(--ink)}#pjGRow b{font-weight:600}#pjGNew{display:inline-flex;gap:6px}#pjGNewIn{width:170px}#pjGLink{color:var(--accent)}';document.head.appendChild(st);}
+{const _po=projOpen;projOpen=async function(){const r=await _po.apply(this,arguments);gDirRender();return r;};}
+// New project from a model file: the import window is the setup step, so the project welcome doesn't open on top of it
+let WLCSKIP=false;
+{const o=$('#pjFromModel');if(o){const n=o.cloneNode(true);o.replaceWith(n);n.addEventListener('click',()=>{pjDlg.close();WLCSKIP=true;exec('new');openImport('add','OPEN');setTimeout(()=>{WLCSKIP=false;},1500);});}}
+{const _ow=openWelcome;openWelcome=function(){if(WLCSKIP){WLCSKIP=false;return;}return _ow.apply(this,arguments);};}
+// Title block details live in the drawing (sheet) settings only
+{const b=$('#pjInfo');if(b)b.remove();}
 
 </script>
 
