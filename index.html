@@ -13973,6 +13973,9 @@ document.head.insertAdjacentHTML('beforeend',`<style>#wlcDlg .wq1{display:flex;g
 #wlcDlg .wq1>.th i{position:absolute;border-radius:2px;background:var(--line)}#wlcDlg .wq1>.th i.a{background:var(--accent)}#wlcDlg .wq1>.th i.v{background:var(--panel)}
 @media (max-width:600px){#wlcDlg .wq1>.th{display:none}}</style>`);
 
+// welcome: the layout preview sits right beside question 1's text, centered on it (Ireny 2026-10-24: it was off in the corner)
+document.head.insertAdjacentHTML('beforeend',`<style>#wlcDlg .wq1{justify-content:flex-start;align-items:center;gap:32px}#wlcDlg .wq1l{flex:0 1 560px}#wlcDlg .wq1>.th{margin-top:0}</style>`);
+
 </script>
 
 </html>
