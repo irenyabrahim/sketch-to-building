@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Itteriva</title><!-- v105d Google Drive save, firm tester step 4 -->
+<title>Itteriva</title><!-- v105e Google Drive save fix, firm tester step 4 -->
 <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="icon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="icon-180.png"><meta name="theme-color" content="#202326">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600&family=Architects+Daughter&display=swap">
@@ -14018,6 +14018,30 @@ async function gOpen(){if(pjDlg.open)pjDlg.close();msg('Opening Google Drive…'
 {const _po=projOpen;projOpen=function(){gWarm();return _po.apply(this,arguments);};}
 function gCmd(lk){if(['savetogoogledrive','savedrive','gdrivesave','googledrive','drivesave'].includes(lk)){gSave();return true;}if(['openfromgoogledrive','opendrive','gdriveopen','driveopen'].includes(lk)){gOpen();return true;}return false;}
 {const _r=run;run=function(raw){const lk=String(raw||'').trim().toLowerCase().replace(/\s+/g,'');if(lk&&gCmd(lk)){cmdIn.value='';return;}return _r.apply(this,arguments);};}
+
+
+/* ---------- Firm tester fixes, step 4b (2026-10-24, Ireny: Save to Google Drive flickered the window and did nothing) ----------
+   The button closed the Project window first, so a missing name or a sign-in problem reopened it or only showed in the command line.
+   Now the window stays open while saving, says what is happening in it, and closes only once the file is on Drive. */
+function gNote(t,bad){msg(t);if(pjDlg.open){pjMsg(t);const m=$('#pjMsg');if(m)m.classList.toggle('pjbad',!!bad);}}
+gSave=async function(){if(!PJ)await projBoot();const N=$('#pjName');
+  if(N&&N.value.trim()&&pjName()==='Untitled project'){S.sheetStyle.project=N.value.trim();projSync();save();}
+  if(pjName()==='Untitled project'){if(!pjDlg.open)projOpen('save');setTimeout(()=>{gNote('Type a project name above first, then Save to Google Drive.',true);$('#pjName').focus();},60);return false;}
+  const B0=$('#pjGSave');if(B0){B0.disabled=true;B0.textContent='Saving…';}
+  const done=()=>{if(B0){B0.disabled=false;B0.textContent='Save to Google Drive';}};
+  const name=pjFile(pjName()),data=projectJSON(),sv=JSON.parse(data).saved;gNote('Saving to Google Drive… If a Google window opens, choose your account there.');
+  let t;try{t=await gToken();}catch(e){done();gNote(hx(e.message)+' Your work is still kept in this browser.',true);return false;}
+  const id=PJ.cloud&&PJ.cloud.p==='gdrive'?PJ.cloud.id:null,B='itteriva'+Date.now().toString(36);
+  const body=`--${B}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(id?{name}:{name,mimeType:'application/json'})}\r\n--${B}\r\nContent-Type: application/json\r\n\r\n${data}\r\n--${B}--`;
+  const send=fid=>fetch(`https://www.googleapis.com/upload/drive/v3/files${fid?'/'+fid:''}?uploadType=multipart&fields=id,name`,{method:fid?'PATCH':'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'multipart/related; boundary='+B},body});
+  try{let r=await send(id);if(id&&(r.status===404||r.status===403))r=await send(null);
+    if(r.status===401){GTOK=null;throw new Error('Google sign-in expired. Click Save to Google Drive again to sign in.');}
+    if(!r.ok){let why='';try{const j=await r.json();why=j.error&&j.error.message||'';}catch(_){}console.error('Google Drive save',r.status,why);throw new Error(`Google Drive did not accept the file (${r.status}${why?': '+why:''}).`);}
+    const j=await r.json();done();PJ.cloud={p:'gdrive',id:j.id};pjSaved(`${j.name||name} on Google Drive`,sv);
+    msg(`Saved ${hx(j.name||name)} to your Google Drive. Ctrl+S saves over the same file from now on; open it on any computer with Open from Google Drive.`);return true;}
+  catch(e){done();console.error('Google Drive save',e);gNote(hx(e.message||'Saving to Google Drive failed.')+' Your work is still kept in this browser.',true);return false;}};
+{const o=$('#pjGSave');if(o){const n=o.cloneNode(true);o.replaceWith(n);n.addEventListener('click',()=>gSave());}}
+{const st=document.createElement('style');st.textContent='#pjMsg.pjbad{color:var(--danger,#b3261e);font-weight:600}';document.head.appendChild(st);}
 
 </script>
 
