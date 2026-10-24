@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Itteriva</title><!-- v105h one Program picker, firm tester step 6 -->
+<title>Itteriva</title><!-- v105i toolbar highlight fix -->
 <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="icon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="icon-180.png"><meta name="theme-color" content="#202326">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600&family=Architects+Daughter&display=swap">
@@ -14230,6 +14230,18 @@ function setProgram(k){const none=k==='none',ck=none?'sketchup':k;PRF.knowNone=n
 
 // the one Program picker stays visible in every style; the old Layout picker stays hidden
 {const _h=hdrSync;hdrSync=function(){const r=_h.apply(this,arguments);const l=$('#layoutSel'),c=$('#ctlSel');if(l&&l.parentElement)l.parentElement.hidden=true;if(c&&c.parentElement)c.parentElement.hidden=false;return r;};hdrSync();}
+
+
+/* ---------- Fix (2026-10-24, Ireny): clicking Box, Cylinder or Sphere lit up Sketch (polyline) on the toolbar ----------
+   They run as sketch shapes (tool 'sketch' with a solid rect, circle or sphere), so the toolbar now lights the button for the shape being drawn;
+   drawing walls or floors lights Wall or Floor. */
+function railCur(){if(tool!=='sketch')return tool;if(typeof DEL!=='undefined'&&DEL==='wall')return'wallcrv';if(typeof DEL!=='undefined'&&DEL==='floor')return'floor';
+  if(sk&&sk.solid)return{rect:'box',circle:'cylinder',sphere:'sphere'}[sk.shape]||'sketch';return'sketch';}
+{const _sr=syncRail;syncRail=function(){const r=_sr.apply(this,arguments),c=railCur();
+  document.querySelectorAll('#rail button[data-tool],#gRail [data-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tool===c)));return r;};}
+{const _ss=startShape;startShape=function(){const r=_ss.apply(this,arguments);syncRail();return r;};}
+
+{const _es=elStart;elStart=function(){const r=_es.apply(this,arguments);syncRail();return r;};}
 
 </script>
 
