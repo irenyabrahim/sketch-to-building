@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Itteriva</title><!-- v105g Drive window, firm tester step 4 -->
+<title>Itteriva</title><!-- v105h one Program picker, firm tester step 6 -->
 <link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="icon" href="icon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="icon-180.png"><meta name="theme-color" content="#202326">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600&family=Architects+Daughter&display=swap">
@@ -5041,7 +5041,7 @@ function openWelcome(){WLC.know=PRF.welcomed&&PRF.knowNone?'none':S.keymap;WLC.l
 $('#wlcGo').addEventListener('click',()=>{const d=$('#wlcDlg'),none=WLC.know==='none';
   PRF.knowNone=none;PRF.welcomed=true;const ck=none?'sketchup':WLC.know;if(ck!==S.keymap)setKeymap(ck);
   PRF.layout=none?'classic':WLC.know;PRF.style=WLC.style||(none?'guided':'familiar');applyTemplate();if(typeof setLayout==='function')setLayout(!none&&WLC.know==='rhino'&&PRF.style!=='guided'?'4':'1');setLearn(WLC.learn,true);try{d.close();}catch(e){d.removeAttribute('open');}prfSave();
-  msg(`${none?'Simple layout. Commands from every program work here; start with Sketch on the left or type one you know.':`${KM[S.keymap]} layout and controls${PRF.style==='guided'?', with guided tools':''}. Layout, Controls and Learn sit separately in the top bar; change one and the others stay.`}${PRF.learn?` Learn mode is on for ${KM[PRF.learn]}: watch for the card above the command line.`:''}`);});
+  msg(`${none?'Simple layout. Commands from every program work here; start with Sketch on the left or type one you know.':`${KM[S.keymap]} layout and controls${PRF.style==='guided'?', with guided tools':''}. Program and Learn sit in the top bar and can be changed any time.`}${PRF.learn?` Learn mode is on for ${KM[PRF.learn]}: watch for the card above the command line.`:''}`);});
 $('#wlcDlg').addEventListener('cancel',()=>{PRF.welcomed=true;prfSave();});
 
 // v60 program layout templates: the screen arranged like the program you know, in our own look
@@ -13418,7 +13418,7 @@ function ktSteps(k){const P=KTP[k]||'your program',lv=ptName('s'),mb=ktTool('bui
   return[
   {t:`Welcome, ${P} user`,d:`You already know how to model, so this takes about three minutes. Each step shows what will feel familiar from ${P}, what works differently here, and why.`,toc:1,
     why:'The short version: you build one model, and the plans, sections, elevations and sheets come from it and stay up to date. No redrawing after every iteration.'},
-  {sec:'Your setup',el:[()=>$('#layoutSel')&&$('#layoutSel').previousElementSibling,'#layoutSel','#learnSel'],t:`Your ${P} setup`,
+  {sec:'Your setup',el:[()=>$('#ctlSel')&&$('#ctlSel').previousElementSibling,'#ctlSel','#learnSel'],t:`Your ${P} setup`,
     f:pick({rhino:'Command line on top, four viewports and Rhino command names. The mouse works the way it does in Rhino.',revit:'Tools along the top, Properties on the side, two-letter shortcuts like WA, DR and WN. The mouse works the way it does in Revit.',sketchup:'One row of tools, single keys like L, R, P and M, and Entity Info on the side. The mouse works the way it does in SketchUp.',autocad:'Tools along the top, the command line at the bottom and aliases like L, PL, TR and O. The mouse works the way it does in AutoCAD.'}),
     n:`Layout, Controls and Learn are three separate choices. Keep the ${P} screen and switch to another program's shortcuts, or the other way round. Another user who works in a different program opens the same file in their own setup.`},
   {sec:'Your setup',el:'#cmdForm',t:'Type what you already know',
@@ -14210,6 +14210,24 @@ gSave=async function(pick){if(!PJ)await projBoot();const c=PJ.cloud&&PJ.cloud.p=
 gOpen=function(){return gdShow('open');};
 {for(const [id,fn] of [['#pjGSave',()=>gSave(true)],['#pjGOpen',()=>gOpen()]]){const o=$(id);if(o){const n=o.cloneNode(true);n.disabled=false;n.textContent=id==='#pjGSave'?'Save to Google Drive…':'Open from Google Drive…';o.replaceWith(n);n.addEventListener('click',fn);}}}
 gDirRender=function(){};
+
+
+/* ---------- Firm tester fixes, step 6 (2026-10-24, Ireny: Layout and Controls should be one thing to avoid confusion) ----------
+   One Program picker in the top bar sets both the screen arrangement and the commands, shortcuts and mouse. Simple = new to all four.
+   While practicing a learn program, the picker keeps showing (and changes) the program you work in. UILAYOUT still changes only the layout. */
+{const l=$('#layoutSel');if(l&&l.closest('label'))l.closest('label').hidden=true;
+  const c=$('#ctlSel'),lb=c&&c.closest('label');if(lb){lb.title='Program: the screen, command names, shortcuts and mouse all work like this program.';lb.querySelector('span').textContent='Program';}}
+function progCur(){return PRF.knowNone?'none':(PRF.prac||S.keymap);}
+renderCtlSel=function(){const s=$('#ctlSel');if(!s)return;if(s.options.length!==5)s.innerHTML=Object.keys(KM).map(k=>`<option value="${k}">${KM[k]}</option>`).join('')+'<option value="none">Simple (new to all)</option>';s.value=progCur();};
+function setProgram(k){const none=k==='none',ck=none?'sketchup':k;PRF.knowNone=none;PRF.knowAll=false;
+  if(PRF.prac){PRF.prac=ck;}else if(ck!==S.keymap)setKeymap(ck);
+  PRF.layout=none?'classic':ck;PRF.wcur='';prfSave();applyTemplate();if(typeof custRender==='function')custRender();renderCtlSel();
+  msg(none?'Simple: labeled tools, and every program\'s commands work, with tips as you go.':`Works like ${KM[ck]} now: the screen, command names, shortcuts and mouse.${PRF.prac?` You're still practicing ${KM[S.keymap]} commands; Stop learning goes back to ${KM[ck]}.`:''}`);}
+{const o=$('#ctlSel');if(o){const n=o.cloneNode(false);o.replaceWith(n);n.addEventListener('change',e=>setProgram(e.target.value));renderCtlSel();}}
+{const _sk=setKeymap;setKeymap=function(k){const r=_sk.apply(this,arguments);renderCtlSel();return r;};}
+
+// the one Program picker stays visible in every style; the old Layout picker stays hidden
+{const _h=hdrSync;hdrSync=function(){const r=_h.apply(this,arguments);const l=$('#layoutSel'),c=$('#ctlSel');if(l&&l.parentElement)l.parentElement.hidden=true;if(c&&c.parentElement)c.parentElement.hidden=false;return r;};hdrSync();}
 
 </script>
 
